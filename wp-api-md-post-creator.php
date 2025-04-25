@@ -4,6 +4,7 @@ Plugin Name: Markdown Post Creator
 Description: A plugin to create posts from uploaded Markdown files with featured images.
 Version: 1.0
 Author: Mirzalazuardi Hermawan
+Author URI: https://mirzalazuardi.com
 */
 
 // Hook into the REST API initialization
@@ -22,6 +23,9 @@ function register_custom_api_endpoints() {
 }
 
 function handle_markdown_file_upload_with_image($request) {
+    // Parse the JSON body of the request
+    $json_body = json_decode($request->get_body(), true);
+
     // Step 1: Check if a file was uploaded
     if (empty($_FILES['markdown_file'])) {
         return new WP_Error('missing_file', 'No file uploaded.', array('status' => 400));
@@ -41,22 +45,26 @@ function handle_markdown_file_upload_with_image($request) {
         return new WP_Error('file_too_large', 'File size exceeds the maximum limit of 5MB.', array('status' => 400));
     }
 
-    // Step 4: Read the file content
+    // Step 3: Read the file content
     $file_content = file_get_contents($uploaded_file['tmp_name']);
     if (!$file_content) {
         return new WP_Error('file_read_error', 'Failed to read the file content.', array('status' => 500));
     }
 
-    // Step 5: Convert Markdown to HTML
+    // Step 4: Convert Markdown to HTML
     $html_content = convert_markdown_to_html($file_content);
 
-    // Step 6: Extract the first image URL from the Markdown content
+    // Step 5: Extract the first image URL from the Markdown content
     $first_image_url = extract_first_image_url_from_markdown($file_content);
 
-    // Step 7: Extract title from the file name (optional)
-    $title = sanitize_text_field(pathinfo($uploaded_file['name'], PATHINFO_FILENAME));
+    // Step 6: Extract title from the file name (optional)
+    $title = isset($request['title']) && !empty($request['title'])
+        ? sanitize_text_field($request['title'])
+        : sanitize_text_field(pathinfo($uploaded_file['name'], PATHINFO_FILENAME));
+    //$title = !empty($json_body['title']) ? sanitize_text_field($json_body['title']) : 'Untitled Post';
+    //$title = sanitize_text_field(pathinfo($uploaded_file['name'], PATHINFO_FILENAME));
 
-    // Step 8: Create the post
+    // Step 7: Create the post
     $post_id = wp_insert_post(array(
         'post_title'   => $title,
         'post_content' => $html_content,
@@ -69,7 +77,7 @@ function handle_markdown_file_upload_with_image($request) {
         return new WP_Error('post_creation_failed', 'Failed to create the post.', array('status' => 500));
     }
 
-    // Step 9: Set the first image as the featured image
+    // Step 8: Set the first image as the featured image
     if ($first_image_url) {
         $image_id = download_and_attach_image($first_image_url, $post_id);
         if (!is_wp_error($image_id)) {
@@ -77,7 +85,7 @@ function handle_markdown_file_upload_with_image($request) {
         }
     }
 
-    // Step 10: Return success response
+    // Step 9: Return success response
     return array(
         'status'  => 'success',
         'message' => 'Post created successfully.',
